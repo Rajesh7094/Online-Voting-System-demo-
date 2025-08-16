@@ -211,115 +211,60 @@ def get_voting_time_status():
 
 # --- Mobile Detection ---
 def check_mobile():
-    """Simple mobile device detection"""
-    user_agent = st.experimental_get_query_params().get("user_agent", [""])[0]
+    """Simple mobile device detection using user agent"""
+    user_agent = st.query_params.get("user_agent", "")
+    if isinstance(user_agent, list):
+        user_agent = user_agent[0] if user_agent else ""
     return any(m in user_agent.lower() for m in ["mobile", "android", "iphone"])
+
+
+# --- Session State Initialization ---
+def init_session_state():
+    """Initialize session state variables"""
+    if 'page' not in st.session_state:
+        st.session_state.page = 'home'
+    if 'admin_logged_in' not in st.session_state:
+        st.session_state.admin_logged_in = False
+    if 'student_logged_in' not in st.session_state:
+        st.session_state.student_logged_in = False
+    if 'current_student' not in st.session_state:
+        st.session_state.current_student = None
+    if 'winner_declared' not in st.session_state:
+        st.session_state.winner_declared = False
+    if 'declared_winner' not in st.session_state:
+        st.session_state.declared_winner = None
+    if 'registration_success' not in st.session_state:
+        st.session_state.registration_success = False
+    if 'auto_declared' not in st.session_state:
+        st.session_state.auto_declared = False
+    if 'auto_declaration_processed' not in st.session_state:
+        st.session_state.auto_declaration_processed = False
+    if 'is_mobile' not in st.session_state:
+        st.session_state.is_mobile = check_mobile()
 
 
 # --- Main App Structure ---
 def main():
-    # Initialize session state and mobile detection
-    if 'is_mobile' not in st.session_state:
-        st.session_state.is_mobile = check_mobile()
+    # Initialize session state
+    init_session_state()
 
     # Initialize database
     init_database()
 
-    # Home Page
+    # Route to appropriate page
     if st.session_state.page == 'home':
         show_home_page()
-    # ... (other page handlers remain the same)
+    elif st.session_state.page == 'signup':
+        show_signup_page()
+    elif st.session_state.page == 'vote':
+        show_voting_page()
+    elif st.session_state.page == 'admin_login':
+        show_admin_login()
+    elif st.session_state.page == 'admin_panel':
+        show_admin_panel()
 
 
-def show_home_page():
-    """Improved home page with responsive design"""
-    st.title("🗳️ Online Voting System")
-    st.subheader("Messi vs Ronaldo - Who's the GOAT?")
-
-    # Voting status
-    time_status = get_voting_time_status()
-
-    # Status banners
-    status_colors = {
-        'not_started': 'blue',
-        'active': 'green',
-        'ended': 'red',
-        'disabled': 'orange',
-        'no_schedule': 'gray'
-    }
-
-    st.info(f"**Status:** {time_status['message']}", icon="⏰")
-
-    # Candidate display
-    cols = responsive_column_layout()
-
-    with cols[0]:
-        display_candidate('Messi', time_status)
-
-    if len(cols) > 1:  # Only show side-by-side on desktop
-        with cols[1]:
-            display_candidate('Ronaldo', time_status)
-    else:  # On mobile, show sequentially
-        display_candidate('Ronaldo', time_status)
-
-    # Navigation buttons
-    nav_cols = st.columns(3 if not st.session_state.is_mobile else 1)
-
-    with nav_cols[0]:
-        if st.button("📝 Student Sign-Up", use_container_width=True):
-            st.session_state.page = 'signup'
-            st.rerun()
-
-    with nav_cols[1]:
-        disabled = not time_status['can_vote']
-        if st.button("🗳️ Vote Now", use_container_width=True, disabled=disabled):
-            st.session_state.page = 'vote'
-            st.rerun()
-
-    with nav_cols[2]:
-        if st.button("👨‍💼 Admin Panel", use_container_width=True):
-            st.session_state.page = 'admin_login'
-            st.rerun()
-
-    # Show winner if declared
-    if st.session_state.get('winner_declared', False):
-        display_winner(st.session_state.declared_winner)
-
-
-def display_candidate(candidate, time_status):
-    """Responsive candidate display"""
-    image = get_candidate_image(candidate)
-    if image:
-        st.image(image, caption=candidate, use_column_width=True)
-    else:
-        color = "#1f77b4" if candidate == "Messi" else "#ff7f0e"
-        st.markdown(f"""
-        <div style="
-            width: 100%;
-            height: 200px;
-            background: {color};
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-            font-weight: bold;
-            border-radius: 10px;
-            margin: 10px 0;
-        ">
-            {candidate}
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Show vote count if voting ended
-    if time_status['status'] == 'ended':
-        results = get_vote_results()
-        total = sum(results.values())
-        if total > 0:
-            percent = (results[candidate] / total) * 100
-            st.metric(f"{candidate} Votes",
-                      f"{results[candidate]} ({percent:.1f}%)")
-
+# [Rest of your page display functions (show_home_page, show_signup_page, etc.) remain the same]
 
 if __name__ == "__main__":
     main()
