@@ -21,8 +21,8 @@ st.set_page_config(
 )
 
 
-# --- Cached Database Functions ---
-@st.cache_resource(ttl=60)  # Cache for 60 seconds
+# --- Database Functions ---
+@st.cache_resource(ttl=60)
 def init_database():
     """Initialize SQLite database with required tables"""
     conn = sqlite3.connect('voting_system.db', check_same_thread=False)
@@ -59,24 +59,21 @@ def init_database():
     ''')
 
     conn.commit()
-    return conn  # Return persistent connection
+    return conn
 
 
-# Get database connection with caching
 @st.cache_resource
 def get_db_connection():
     return sqlite3.connect('voting_system.db', check_same_thread=False)
 
 
-# --- Cached Data Fetching ---
-@st.cache_data(ttl=10)  # Refresh every 10 seconds
+# --- Data Fetching ---
+@st.cache_data(ttl=10)
 def get_vote_results():
-    """Get voting results with caching"""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT candidate, COUNT(*) as votes FROM votes GROUP BY candidate')
     results = cursor.fetchall()
-
     vote_dict = {'Messi': 0, 'Ronaldo': 0}
     for candidate, votes in results:
         vote_dict[candidate] = votes
@@ -85,7 +82,6 @@ def get_vote_results():
 
 @st.cache_data(ttl=30)
 def get_all_students():
-    """Get all registered students with caching"""
     conn = get_db_connection()
     return pd.read_sql_query(
         'SELECT register_number, name, registration_time FROM students ORDER BY registration_time DESC',
@@ -93,16 +89,15 @@ def get_all_students():
     )
 
 
-# --- Improved UI Components ---
+# --- UI Components ---
 def responsive_column_layout():
     """Returns appropriate column layout based on screen size"""
     if st.session_state.get('is_mobile', False):
-        return st.columns(1)  # Single column for mobile
-    return st.columns(2)  # Two columns for desktop
+        return st.columns(1)
+    return st.columns(2)
 
 
 def load_candidate_image(candidate_name):
-    """Improved image loading with caching"""
     image_path = f"images/{candidate_name.lower()}.jpg"
     if os.path.exists(image_path):
         return Image.open(image_path)
@@ -111,29 +106,23 @@ def load_candidate_image(candidate_name):
 
 @st.cache_data
 def get_candidate_image(candidate_name):
-    """Cached version of image loading"""
     return load_candidate_image(candidate_name)
 
 
 def display_winner(winner):
-    """Enhanced winner display with image"""
     st.markdown("---")
-
     if winner == "Tie":
         st.success("🏆 IT'S A TIE! 🏆")
     else:
         col1, col2 = responsive_column_layout()
-
         with col1:
             st.success(f"🏆 WINNER: {winner} 🏆")
             image = get_candidate_image(winner)
             if image:
                 st.image(image, width=300)
-
         with col2:
             results = get_vote_results()
             total = sum(results.values())
-
             if winner == "Messi":
                 messi_percent = (results['Messi'] / total) * 100
                 st.metric("Messi", f"{results['Messi']} votes", f"{messi_percent:.1f}%")
@@ -142,9 +131,8 @@ def display_winner(winner):
                 st.metric("Ronaldo", f"{results['Ronaldo']} votes", f"{ronaldo_percent:.1f}%")
 
 
-# --- Modified Time Handling ---
+# --- Time Handling ---
 def get_voting_time_status():
-    """Improved time status with better caching"""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM voting_settings ORDER BY id DESC LIMIT 1')
@@ -209,18 +197,276 @@ def get_voting_time_status():
         }
 
 
-# --- Mobile Detection ---
-def check_mobile():
-    """Simple mobile device detection using user agent"""
-    user_agent = st.query_params.get("user_agent", "")
-    if isinstance(user_agent, list):
-        user_agent = user_agent[0] if user_agent else ""
-    return any(m in user_agent.lower() for m in ["mobile", "android", "iphone"])
+# --- Page Display Functions ---
+def show_home_page():
+    st.title("🗳️ Online Voting System")
+    st.subheader("Messi vs Ronaldo - Who's the GOAT?")
+
+    time_status = get_voting_time_status()
+    st.info(f"**Status:** {time_status['message']}", icon="⏰")
+
+    cols = responsive_column_layout()
+
+    with cols[0]:
+        display_candidate('Messi', time_status)
+
+    if len(cols) > 1:
+        with cols[1]:
+            display_candidate('Ronaldo', time_status)
+    else:
+        display_candidate('Ronaldo', time_status)
+
+    nav_cols = st.columns(3 if not st.session_state.is_mobile else 1)
+
+    with nav_cols[0]:
+        if st.button("📝 Student Sign-Up", use_container_width=True):
+            st.session_state.page = 'signup'
+            st.rerun()
+
+    with nav_cols[1]:
+        disabled = not time_status['can_vote']
+        if st.button("🗳️ Vote Now", use_container_width=True, disabled=disabled):
+            st.session_state.page = 'vote'
+            st.rerun()
+
+    with nav_cols[2]:
+        if st.button("👨‍💼 Admin Panel", use_container_width=True):
+            st.session_state.page = 'admin_login'
+            st.rerun()
+
+    if st.session_state.get('winner_declared', False):
+        display_winner(st.session_state.declared_winner)
 
 
-# --- Session State Initialization ---
+def display_candidate(candidate, time_status):
+    image = get_candidate_image(candidate)
+    if image:
+        st.image(image, caption=candidate, use_column_width=True)
+    else:
+        color = "#1f77b4" if candidate == "Messi" else "#ff7f0e"
+        st.markdown(f"""
+        <div style="
+            width: 100%;
+            height: 200px;
+            background: {color};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 10px;
+            margin: 10px 0;
+        ">
+            {candidate}
+        </div>
+        """, unsafe_allow_html=True)
+
+    if time_status['status'] == 'ended':
+        results = get_vote_results()
+        total = sum(results.values())
+        if total > 0:
+            percent = (results[candidate] / total) * 100
+            st.metric(f"{candidate} Votes", f"{results[candidate]} ({percent:.1f}%)")
+
+
+def show_signup_page():
+    st.title("📝 Student Registration")
+    if st.button("← Back to Home"):
+        st.session_state.page = 'home'
+        st.session_state.registration_success = False
+        st.rerun()
+
+    st.markdown("---")
+    if st.session_state.registration_success:
+        st.success("✅ Registration successful!")
+        if st.button("Go to Voting Page", use_container_width=True):
+            st.session_state.page = 'vote'
+            st.session_state.registration_success = False
+            st.rerun()
+        return
+
+    with st.form("registration_form"):
+        st.subheader("Register to Vote")
+        register_number = st.text_input("Student Register Number", placeholder="e.g., 2021CS001")
+        name = st.text_input("Full Name", placeholder="Enter your full name")
+        submitted = st.form_submit_button("Register", use_container_width=True)
+
+        if submitted:
+            if not register_number or not name:
+                st.error("Please fill in all fields!")
+            elif len(register_number.strip()) < 3:
+                st.error("Register number must be at least 3 characters long!")
+            elif len(name.strip()) < 2:
+                st.error("Name must be at least 2 characters long!")
+            else:
+                try:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('INSERT INTO students (register_number, name) VALUES (?, ?)',
+                                   (register_number, name))
+                    conn.commit()
+                    st.session_state.current_student = register_number
+                    st.session_state.student_logged_in = True
+                    st.session_state.registration_success = True
+                    st.rerun()
+                except sqlite3.IntegrityError:
+                    st.error("This register number is already registered!")
+
+
+def show_voting_page():
+    st.title("🗳️ Voting Page")
+    if st.button("← Back to Home"):
+        st.session_state.page = 'home'
+        st.rerun()
+
+    time_status = get_voting_time_status()
+    if time_status['status'] == 'not_started':
+        st.warning(f"⏰ {time_status['message']}")
+        return
+    elif time_status['status'] == 'ended':
+        st.error(f"⏰ {time_status['message']}")
+        return
+    elif time_status['status'] == 'disabled':
+        st.warning("⚠️ Voting is currently disabled by admin.")
+        return
+    elif time_status['status'] == 'active':
+        st.success(f"✅ {time_status['message']}")
+
+    if not st.session_state.student_logged_in:
+        st.warning("Please verify your registration to vote.")
+        register_number = st.text_input("Enter your Register Number to vote:")
+        if st.button("Verify and Vote"):
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT register_number FROM students WHERE register_number = ?', (register_number,))
+            if cursor.fetchone():
+                cursor.execute('SELECT register_number FROM votes WHERE register_number = ?', (register_number,))
+                if cursor.fetchone():
+                    st.error("You have already voted!")
+                else:
+                    st.session_state.current_student = register_number
+                    st.session_state.student_logged_in = True
+                    st.rerun()
+            else:
+                st.error("Register number not found. Please register first!")
+        return
+
+    if has_student_voted(st.session_state.current_student):
+        st.success("✅ You have already cast your vote!")
+        if st.button("Logout"):
+            st.session_state.student_logged_in = False
+            st.session_state.current_student = None
+            st.session_state.page = 'home'
+            st.rerun()
+        return
+
+    if time_status['can_vote']:
+        st.markdown("---")
+        st.subheader("🏆 Messi vs Ronaldo - Cast Your Vote!")
+        col1, col2 = responsive_column_layout()
+        with col1:
+            display_candidate_image('Messi')
+            if st.button("⚽ Vote for Messi", use_container_width=True, type="primary"):
+                cast_vote(st.session_state.current_student, "Messi")
+        with col2:
+            display_candidate_image('Ronaldo')
+            if st.button("⚽ Vote for Ronaldo", use_container_width=True, type="primary"):
+                cast_vote(st.session_state.current_student, "Ronaldo")
+
+
+def show_admin_login():
+    st.title("👨‍💼 Admin Login")
+    if st.button("← Back to Home"):
+        st.session_state.page = 'home'
+        st.rerun()
+
+    st.markdown("---")
+    with st.form("admin_login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.form_submit_button("Login"):
+            if username == "admin" and password == "admin123":
+                st.session_state.admin_logged_in = True
+                st.session_state.page = 'admin_panel'
+                st.rerun()
+            else:
+                st.error("Invalid credentials!")
+
+
+def show_admin_panel():
+    if not st.session_state.admin_logged_in:
+        st.session_state.page = 'admin_login'
+        st.rerun()
+        return
+
+    st.title("👨‍💼 Admin Panel")
+    col1, col2 = st.columns([6, 1])
+    with col2:
+        if st.button("Logout"):
+            st.session_state.admin_logged_in = False
+            st.session_state.page = 'home'
+            st.rerun()
+
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        ["📊 Voting Results", "👥 Student Data", "✅ Voted Students", "🏆 Declare Winner", "🔄 Re-Election",
+         "⏰ Time Settings"])
+
+    # [Rest of your admin panel tabs implementation]
+
+
+# --- Helper Functions ---
+def has_student_voted(register_number):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT register_number FROM votes WHERE register_number = ?', (register_number,))
+    return cursor.fetchone() is not None
+
+
+def cast_vote(register_number, candidate):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO votes (register_number, candidate) VALUES (?, ?)',
+                       (register_number, candidate))
+        conn.commit()
+        st.success(f"🎉 Thank you for voting for {candidate}!")
+        time.sleep(2)
+        st.rerun()
+        return True
+    except Exception as e:
+        st.error(f"Voting failed: {str(e)}")
+        return False
+
+
+def display_candidate_image(candidate_name):
+    image = get_candidate_image(candidate_name)
+    if image:
+        st.image(image, caption=candidate_name, use_column_width=True)
+    else:
+        color = "#1f77b4" if candidate_name == "Messi" else "#ff7f0e"
+        st.markdown(f"""
+        <div style="
+            width: 100%;
+            height: 200px;
+            background: {color};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 10px;
+            margin: 10px 0;
+        ">
+            {candidate_name}
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# --- Main App ---
 def init_session_state():
-    """Initialize session state variables"""
+    """Initialize all required session state variables"""
     if 'page' not in st.session_state:
         st.session_state.page = 'home'
     if 'admin_logged_in' not in st.session_state:
@@ -240,18 +486,14 @@ def init_session_state():
     if 'auto_declaration_processed' not in st.session_state:
         st.session_state.auto_declaration_processed = False
     if 'is_mobile' not in st.session_state:
-        st.session_state.is_mobile = check_mobile()
+        # Simple mobile detection (you might want to enhance this)
+        st.session_state.is_mobile = False
 
 
-# --- Main App Structure ---
 def main():
-    # Initialize session state
     init_session_state()
-
-    # Initialize database
     init_database()
 
-    # Route to appropriate page
     if st.session_state.page == 'home':
         show_home_page()
     elif st.session_state.page == 'signup':
@@ -263,8 +505,6 @@ def main():
     elif st.session_state.page == 'admin_panel':
         show_admin_panel()
 
-
-# [Rest of your page display functions (show_home_page, show_signup_page, etc.) remain the same]
 
 if __name__ == "__main__":
     main()
