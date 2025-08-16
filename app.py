@@ -1,11 +1,201 @@
-import streamlit as st
+with tab6:
+    st.subheader("⏰ Voting Time Management")
+
+    # Display current settings
+    current_settings = get_voting_settings()
+    time_status = get_voting_time_status()
+
+    # Current status display
+    st.markdown("### 📊 Current Status")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        status_color = {
+            'active': '🟢',
+            'not_started': '🟡',
+            'ended': '🔴',
+            'disabled': '⚫',
+            'no_schedule': '⚪'
+        }
+        st.metric("Voting Status",
+                  f"{status_color.get(time_status['status'], '⚪')} {time_status['status'].title().replace('_', ' ')}")
+
+    with col2:
+        if current_settings and current_settings['start_time']:
+            start_time = datetime.fromisoformat(current_settings['start_time'])
+            st.metric("Start Time", start_time.strftime("%Y-%m-%d %H:%M"))
+        else:
+            st.metric("Start Time", "Not Set")
+
+    with col3:
+        if current_settings and current_settings['end_time']:
+            end_time = datetime.fromisoformat(current_settings['end_time'])
+            st.metric("End Time", end_time.strftime("%Y-%m-%d %H:%M"))
+        else:
+            st.metric("End Time", "Not Set")
+
+    if time_status['status'] == 'active' and time_status['time_remaining']:
+        remaining = format_time_remaining(time_status['time_remaining'])
+        st.info(f"⏳ Time remaining: {remaining}")
+
+    st.markdown("---")
+
+    # Time setting form
+    st.markdown("### ⚙️ Set Voting Schedule")
+
+    with st.form("time_settings_form"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            start_date = st.date_input("Start Date", datetime.now().date())
+            start_time_input = st.time_input("Start Time", datetime.now().time())
+
+        with col2:
+            end_date = st.date_input("End Date", (datetime.now() + timedelta(days=1)).date())
+            end_time_input = st.time_input("End Time", (datetime.now() + timedelta(hours=1)).time())
+
+        auto_declare = st.checkbox("Auto-declare winner when time ends", value=True)
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            if st.form_submit_button("📅 Set Schedule", type="primary"):
+                start_datetime = datetime.combine(start_date, start_time_input)
+                end_datetime = datetime.combine(end_date, end_time_input)
+
+                if end_datetime <= start_datetime:
+                    st.error("End time must be after start time!")
+                elif start_datetime < datetime.now():
+                    st.error("Start time cannot be in the past!")
+                else:
+                    if set_voting_time(start_datetime.isoformat(), end_datetime.isoformat(), auto_declare):
+                        st.success("✅ Voting schedule updated successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to update schedule!")
+
+        with col2:
+            if st.form_submit_button("🟢 Enable Now"):
+                if set_voting_time(datetime.now().isoformat(), None, False):
+                    st.success("✅ Voting enabled!")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to enable voting!")
+
+        with col3:
+            if st.form_submit_button("🔴 Disable Voting"):
+                conn = sqlite3.connect('voting_system.db')
+                cursor = conn.cursor()
+                cursor.execute('UPDATE voting_settings SET voting_enabled = 0')
+                conn.commit()
+                conn.close()
+                st.success("✅ Voting disabled!")
+                st.rerun()
+
+    st.markdown("---")
+
+    # Quick time presets
+    st.markdown("### ⚡ Quick Presets")
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if st.button("⏰ 1 Hour", use_container_width=True):
+            start_time = datetime.now()
+            end_time = start_time + timedelta(hours=1)
+            if set_voting_time(start_time.isoformat(), end_time.isoformat(), True):
+                st.success("✅ 1-hour voting set!")
+                st.rerun()
+
+    with col2:
+        if st.button("🕐 6 Hours", use_container_width=True):
+            start_time = datetime.now()
+            end_time = start_time + timedelta(hours=6)
+            if set_voting_time(start_time.isoformat(), end_time.isoformat(), True):
+                st.success("✅ 6-hour voting set!")
+                st.rerun()
+
+    with col3:
+        if st.button("📅 1 Day", use_container_width=True):
+            start_time = datetime.now()
+            end_time = start_time + timedelta(days=1)
+            if set_voting_time(start_time.isoformat(), end_time.isoformat(), True):
+                st.success("✅ 1-day voting set!")
+                st.rerun()
+
+    with col4:
+        if st.button("📆 1 Week", use_container_width=True):
+            start_time = datetime.now()
+            end_time = start_time + timedelta(weeks=1)
+            if set_voting_time(start_time.isoformat(), end_time.isoformat(), True):
+                st.success("✅ 1-week voting set!")
+                st.rerun()
+
+    # Advanced settings
+    st.markdown("---")
+    st.markdown("### 🔧 Advanced Settings")
+
+    if current_settings:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🗑️ Clear Schedule", type="secondary", use_container_width=True):
+                conn = sqlite3.connect('voting_system.db')
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM voting_settings')
+                conn.commit()
+                conn.close()
+                st.success("✅ Schedule cleared!")
+                st.rerun()
+
+        with col2:
+            current_auto = current_settings.get('auto_declare_winner', True)
+            if st.button(f"{'🔴 Disable' if current_auto else '🟢 Enable'} Auto-Declaration", use_container_width=True):
+                conn = sqlite3.connect('voting_system.db')
+                cursor = conn.cursor()
+                cursor.execute('UPDATE voting_settings SET auto_declare_winner = ?', (not current_auto,))
+                conn.commit()
+                conn.close()
+                st.success(f"✅ Auto-declaration {'disabled' if current_auto else 'enabled'}!")
+                st.rerun()
+
+
+# Main application
+def main():
+    st.set_page_config(
+        page_title="Online Voting System",
+        page_icon="🗳️",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
+
+    # Initialize database and session state
+    init_database()
+    init_session_state()
+
+    # Route to appropriate page
+    if st.session_state.page == 'home':
+        show_home_page()
+    elif st.session_state.page == 'signup':
+        show_signup_page()
+    elif st.session_state.page == 'vote':
+        show_voting_page()
+    elif st.session_state.page == 'admin_login':
+        show_admin_login()
+    elif st.session_state.page == 'admin_panel':
+        show_admin_panel()
+
+
+if __name__ == "__main__":
+    main()
+    import streamlit as st
 import sqlite3
 import pandas as pd
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.express as px
 import os
 from PIL import Image
+import time
 
 
 # Database initialization
@@ -31,6 +221,19 @@ def init_database():
             candidate TEXT NOT NULL,
             vote_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (register_number) REFERENCES students (register_number)
+        )
+    ''')
+
+    # Create voting_settings table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS voting_settings (
+            id INTEGER PRIMARY KEY,
+            voting_start_time TIMESTAMP,
+            voting_end_time TIMESTAMP,
+            voting_enabled BOOLEAN DEFAULT 1,
+            auto_declare_winner BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -116,7 +319,160 @@ def get_vote_results():
     return vote_dict
 
 
-# Image handling functions
+# Voting time management functions
+def set_voting_time(start_time, end_time, auto_declare=True):
+    """Set voting start and end time"""
+    try:
+        conn = sqlite3.connect('voting_system.db')
+        cursor = conn.cursor()
+
+        # Delete existing settings
+        cursor.execute('DELETE FROM voting_settings')
+
+        # Insert new settings
+        cursor.execute('''
+            INSERT INTO voting_settings (voting_start_time, voting_end_time, auto_declare_winner, voting_enabled)
+            VALUES (?, ?, ?, 1)
+        ''', (start_time, end_time, auto_declare))
+
+        conn.commit()
+        conn.close()
+        return True
+    except:
+        return False
+
+
+def get_voting_settings():
+    """Get current voting settings"""
+    conn = sqlite3.connect('voting_system.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM voting_settings ORDER BY id DESC LIMIT 1')
+    result = cursor.fetchone()
+    conn.close()
+
+    if result:
+        return {
+            'id': result[0],
+            'start_time': result[1],
+            'end_time': result[2],
+            'voting_enabled': result[3],
+            'auto_declare_winner': result[4],
+            'created_at': result[5],
+            'updated_at': result[6]
+        }
+    return None
+
+
+def is_voting_active():
+    """Check if voting is currently active based on time settings"""
+    settings = get_voting_settings()
+    if not settings or not settings['voting_enabled']:
+        return False
+
+    current_time = datetime.now()
+
+    if settings['start_time'] and settings['end_time']:
+        start_time = datetime.fromisoformat(settings['start_time'])
+        end_time = datetime.fromisoformat(settings['end_time'])
+        return start_time <= current_time <= end_time
+
+    return settings['voting_enabled']
+
+
+def get_voting_time_status():
+    """Get detailed voting time status"""
+    settings = get_voting_settings()
+    current_time = datetime.now()
+
+    if not settings:
+        return {
+            'status': 'no_schedule',
+            'message': 'No voting schedule set',
+            'can_vote': False,
+            'time_remaining': None
+        }
+
+    if not settings['start_time'] or not settings['end_time']:
+        return {
+            'status': 'enabled' if settings['voting_enabled'] else 'disabled',
+            'message': 'Voting is enabled' if settings['voting_enabled'] else 'Voting is disabled',
+            'can_vote': settings['voting_enabled'],
+            'time_remaining': None
+        }
+
+    start_time = datetime.fromisoformat(settings['start_time'])
+    end_time = datetime.fromisoformat(settings['end_time'])
+
+    if current_time < start_time:
+        return {
+            'status': 'not_started',
+            'message': f'Voting will start at {start_time.strftime("%Y-%m-%d %H:%M:%S")}',
+            'can_vote': False,
+            'time_remaining': None,
+            'start_time': start_time
+        }
+    elif current_time > end_time:
+        return {
+            'status': 'ended',
+            'message': f'Voting ended at {end_time.strftime("%Y-%m-%d %H:%M:%S")}',
+            'can_vote': False,
+            'time_remaining': None,
+            'end_time': end_time
+        }
+    else:
+        time_remaining = end_time - current_time
+        return {
+            'status': 'active',
+            'message': f'Voting is active until {end_time.strftime("%Y-%m-%d %H:%M:%S")}',
+            'can_vote': True,
+            'time_remaining': time_remaining,
+            'end_time': end_time
+        }
+
+
+def auto_declare_winner_if_time_ended():
+    """Automatically declare winner if voting time has ended"""
+    settings = get_voting_settings()
+    if not settings or not settings['auto_declare_winner']:
+        return False
+
+    time_status = get_voting_time_status()
+    if time_status['status'] == 'ended' and not st.session_state.winner_declared:
+        results = get_vote_results()
+        total_votes = sum(results.values())
+
+        if total_votes > 0:
+            if results['Messi'] > results['Ronaldo']:
+                winner = "Messi"
+            elif results['Ronaldo'] > results['Messi']:
+                winner = "Ronaldo"
+            else:
+                winner = "Tie"
+
+            st.session_state.winner_declared = True
+            st.session_state.declared_winner = winner
+            st.session_state.auto_declared = True
+            return True
+
+    return False
+
+
+def format_time_remaining(time_delta):
+    """Format time remaining in a readable format"""
+    if time_delta.days > 0:
+        return f"{time_delta.days} days, {time_delta.seconds // 3600} hours, {(time_delta.seconds % 3600) // 60} minutes"
+    elif time_delta.seconds >= 3600:
+        hours = time_delta.seconds // 3600
+        minutes = (time_delta.seconds % 3600) // 60
+        return f"{hours} hours, {minutes} minutes"
+    elif time_delta.seconds >= 60:
+        minutes = time_delta.seconds // 60
+        seconds = time_delta.seconds % 60
+        return f"{minutes} minutes, {seconds} seconds"
+    else:
+        return f"{time_delta.seconds} seconds"
+
+
 def load_candidate_image(candidate_name):
     """Load candidate image from local files"""
     # Define image paths
@@ -238,6 +594,11 @@ def init_session_state():
         st.session_state.declared_winner = None
     if 'registration_success' not in st.session_state:
         st.session_state.registration_success = False
+    if 'auto_declared' not in st.session_state:
+        st.session_state.auto_declared = False
+
+    # Check for auto winner declaration on every page load
+    auto_declare_winner_if_time_ended()
 
 
 # Page navigation functions
@@ -245,6 +606,22 @@ def show_home_page():
     """Display home page with navigation options"""
     st.title("🗳️ Online Voting System")
     st.subheader("Messi vs Ronaldo - Who's the GOAT?")
+
+    # Check and display voting status
+    time_status = get_voting_time_status()
+
+    # Display voting status banner
+    if time_status['status'] == 'not_started':
+        st.info(f"⏰ {time_status['message']}")
+    elif time_status['status'] == 'active':
+        st.success(f"✅ {time_status['message']}")
+        if time_status['time_remaining']:
+            remaining = format_time_remaining(time_status['time_remaining'])
+            st.warning(f"⏳ Time remaining: {remaining}")
+    elif time_status['status'] == 'ended':
+        st.error(f"⏰ {time_status['message']}")
+    elif time_status['status'] == 'disabled':
+        st.warning("⚠️ Voting is currently disabled")
 
     col1, col2 = st.columns(2)
 
@@ -264,7 +641,8 @@ def show_home_page():
             st.rerun()
 
     with col2:
-        if st.button("🗳️ Vote Now", use_container_width=True):
+        vote_button_disabled = not time_status['can_vote']
+        if st.button("🗳️ Vote Now", use_container_width=True, disabled=vote_button_disabled):
             st.session_state.page = 'vote'
             st.rerun()
 
@@ -276,7 +654,15 @@ def show_home_page():
     # Show results if winner is declared
     if st.session_state.winner_declared and st.session_state.declared_winner:
         st.markdown("---")
-        st.success(f"🏆 **WINNER DECLARED: {st.session_state.declared_winner}**")
+
+        # Check if it was auto-declared
+        declaration_type = "🤖 AUTOMATICALLY DECLARED" if st.session_state.get('auto_declared',
+                                                                              False) else "👨‍💼 ADMIN DECLARED"
+
+        if st.session_state.declared_winner == "Tie":
+            st.info(f"🤝 **{declaration_type}: IT'S A TIE!**")
+        else:
+            st.success(f"🏆 **{declaration_type} WINNER: {st.session_state.declared_winner}**")
 
         # Show vote breakdown
         results = get_vote_results()
@@ -285,11 +671,18 @@ def show_home_page():
             messi_percent = (results['Messi'] / total) * 100
             ronaldo_percent = (results['Ronaldo'] / total) * 100
 
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Messi", f"{results['Messi']} votes", f"{messi_percent:.1f}%")
             with col2:
                 st.metric("Ronaldo", f"{results['Ronaldo']} votes", f"{ronaldo_percent:.1f}%")
+            with col3:
+                st.metric("Total Votes", total)
+
+    # Auto-refresh page every 30 seconds when voting is active
+    if time_status['status'] == 'active' and time_status['time_remaining']:
+        time.sleep(1)  # Small delay for smoother updates
+        st.rerun()
 
 
 def show_signup_page():
@@ -347,6 +740,27 @@ def show_voting_page():
         st.session_state.page = 'home'
         st.rerun()
 
+    # Check voting time status
+    time_status = get_voting_time_status()
+
+    # Display voting status
+    if time_status['status'] == 'not_started':
+        st.warning(f"⏰ {time_status['message']}")
+        st.info("Please wait for the voting period to begin.")
+        return
+    elif time_status['status'] == 'ended':
+        st.error(f"⏰ {time_status['message']}")
+        st.info("Voting has ended. Thank you for your interest!")
+        return
+    elif time_status['status'] == 'disabled':
+        st.warning("⚠️ Voting is currently disabled by admin.")
+        return
+    elif time_status['status'] == 'active':
+        st.success(f"✅ {time_status['message']}")
+        if time_status['time_remaining']:
+            remaining = format_time_remaining(time_status['time_remaining'])
+            st.warning(f"⏳ Time remaining: {remaining}")
+
     # Check if student is logged in
     if not st.session_state.student_logged_in:
         st.warning("Please verify your registration to vote.")
@@ -377,33 +791,36 @@ def show_voting_page():
             st.rerun()
         return
 
-    # Voting form
-    st.markdown("---")
-    st.subheader("🏆 Messi vs Ronaldo - Cast Your Vote!")
+    # Voting form - only show if voting is active
+    if time_status['can_vote']:
+        st.markdown("---")
+        st.subheader("🏆 Messi vs Ronaldo - Cast Your Vote!")
 
-    col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col1:
-        display_candidate_image('messi', "Lionel Messi", 250)
-        messi_vote = st.button("⚽ Vote for Messi", use_container_width=True, type="primary")
+        with col1:
+            display_candidate_image('messi', "Lionel Messi", 250)
+            messi_vote = st.button("⚽ Vote for Messi", use_container_width=True, type="primary")
 
-    with col2:
-        display_candidate_image('ronaldo', "Cristiano Ronaldo", 250)
-        ronaldo_vote = st.button("⚽ Vote for Ronaldo", use_container_width=True, type="primary")
+        with col2:
+            display_candidate_image('ronaldo', "Cristiano Ronaldo", 250)
+            ronaldo_vote = st.button("⚽ Vote for Ronaldo", use_container_width=True, type="primary")
 
-    if messi_vote:
-        if cast_vote(st.session_state.current_student, "Messi"):
-            st.success("🎉 Thank you for voting for Messi!")
-            st.balloons()
-        else:
-            st.error("Voting failed. Please try again.")
+        if messi_vote:
+            if cast_vote(st.session_state.current_student, "Messi"):
+                st.success("🎉 Thank you for voting for Messi!")
+                st.balloons()
+            else:
+                st.error("Voting failed. Please try again.")
 
-    if ronaldo_vote:
-        if cast_vote(st.session_state.current_student, "Ronaldo"):
-            st.success("🎉 Thank you for voting for Ronaldo!")
-            st.balloons()
-        else:
-            st.error("Voting failed. Please try again.")
+        if ronaldo_vote:
+            if cast_vote(st.session_state.current_student, "Ronaldo"):
+                st.success("🎉 Thank you for voting for Ronaldo!")
+                st.balloons()
+            else:
+                st.error("Voting failed. Please try again.")
+    else:
+        st.error("❌ Voting is not currently available.")
 
 
 def show_admin_login():
@@ -447,8 +864,9 @@ def show_admin_panel():
             st.session_state.page = 'home'
             st.rerun()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["📊 Voting Results", "👥 Student Data", "✅ Voted Students", "🏆 Declare Winner", "🔄 Re-Election"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        ["📊 Voting Results", "👥 Student Data", "✅ Voted Students", "🏆 Declare Winner", "🔄 Re-Election",
+         "⏰ Time Settings"])
 
     with tab1:
         st.subheader("📊 Voting Results")
