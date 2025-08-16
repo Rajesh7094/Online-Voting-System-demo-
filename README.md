@@ -41,7 +41,12 @@ A comprehensive web-based voting application built with Streamlit that allows st
 
 2. **Install required packages**
    ```bash
-   pip install streamlit sqlite3 pandas plotly Pillow
+   pip install streamlit pandas plotly Pillow
+   ```
+   
+   Or using requirements.txt:
+   ```bash
+   pip install -r requirements.txt
    ```
 
 3. **Set up candidate images** (Optional but recommended)
@@ -203,11 +208,13 @@ CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0
 ## 📋 Requirements.txt
 
 ```txt
-streamlit==1.28.1
-pandas==2.1.1
-plotly==5.17.0
-Pillow==10.0.1
+streamlit==1.48.1
+pandas==2.3.1
+plotly==6.3.0
+Pillow==11.3.0
 ```
+
+**Note:** `sqlite3` is not included as it's part of Python's standard library.
 
 ## 🛠️ Troubleshooting
 
